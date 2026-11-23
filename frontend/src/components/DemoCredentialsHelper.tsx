@@ -52,11 +52,11 @@ export const DemoCredentialsHelper: React.FC<{ onFillCredentials?: (email: strin
       category: 'Department',
     },
     {
-      roleName: 'Student Affairs Section',
-      loginPath: '/login/faculty',
+      roleName: 'Student Section Portal (Registrar)',
+      loginPath: '/login/student-section',
       email: 'studentsection@ctuniversity.edu',
-      idNumber: 'FAC-REG-102',
-      scenario: 'Administrative conduct and academic enrollment verification officer.',
+      idNumber: 'REG-STU-102',
+      scenario: 'Student enrollment registration, personal profiles, academic courses & conduct verification.',
       category: 'Department',
     },
     {

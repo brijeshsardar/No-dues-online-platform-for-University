@@ -12,7 +12,8 @@ import {
   ClipboardList,
   Award,
   Search,
-  ExternalLink
+  ExternalLink,
+  Users
 } from 'lucide-react';
 import { DemoCredentialsHelper } from '../components/DemoCredentialsHelper.js';
 
@@ -33,6 +34,23 @@ export const PortalSelect: React.FC = () => {
         'Apply for No-Dues Clearance',
         'Inspect Authoritative Fee Status',
         'Download RSA-Signed Certificate with QR',
+      ],
+    },
+    {
+      id: 'student-section',
+      title: 'Student Section Portal',
+      category: 'STUDENT ADMINISTRATION',
+      path: '/login/student-section',
+      color: 'sky',
+      badge: 'Student Administration',
+      icon: <Users className="w-7 h-7 text-sky-600" />,
+      desc: 'Manage student registration, personal details, academic records, enrollment information and student profiles.',
+      bullets: [
+        'Register New Students',
+        'Manage Student Profiles',
+        'Update Academic Information',
+        'View Student Records',
+        'Manage Enrollment Details',
       ],
     },
     {

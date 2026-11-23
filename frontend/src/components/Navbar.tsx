@@ -19,7 +19,8 @@ import {
   Award,
   Layers,
   Menu,
-  X
+  X,
+  Users
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -41,8 +42,8 @@ export const Navbar: React.FC = () => {
   const getRoleDisplayName = (role?: string) => {
     switch (role) {
       case 'STUDENT': return 'Student';
+      case 'STUDENT_SECTION': return 'Student Section Registrar';
       case 'ACCOUNT_SECTION': return 'Account Section Officer';
-      case 'STUDENT_SECTION': return 'Student Affairs Registrar';
       case 'LIBRARY': return 'Chief Librarian';
       case 'IT_DEPARTMENT': return 'IT Infrastructure';
       case 'CLASS_COORDINATOR': return 'Class Coordinator';
@@ -63,6 +64,13 @@ export const Navbar: React.FC = () => {
           { label: 'Clearance Status', path: '/my-requests', icon: <ClipboardList className="w-3.5 h-3.5" /> },
           { label: 'Fee Details', path: '/fee-status', icon: <DollarSign className="w-3.5 h-3.5" /> },
           { label: 'Digital Certificate', path: '/my-certificate', icon: <Award className="w-3.5 h-3.5" /> },
+        ];
+      case 'STUDENT_SECTION':
+        return [
+          { label: 'Student Section Dashboard', path: '/dashboard/student-section', icon: <Users className="w-3.5 h-3.5" /> },
+          { label: 'Register Student', path: '/dashboard/student-section?tab=register', icon: <GraduationCap className="w-3.5 h-3.5" /> },
+          { label: 'Manage Students', path: '/dashboard/student-section?tab=manage', icon: <User className="w-3.5 h-3.5" /> },
+          { label: 'Clearance Queue', path: '/dashboard/student-section?tab=conduct', icon: <CheckCircle className="w-3.5 h-3.5" /> },
         ];
       case 'CLASS_COORDINATOR':
         return [
@@ -106,6 +114,7 @@ export const Navbar: React.FC = () => {
 
   const allPortals = [
     { label: 'Student Portal', path: '/login/student', desc: 'Enrolled students clearance & certificates', icon: <GraduationCap className="w-4 h-4 text-blue-400" /> },
+    { label: 'Student Section Portal', path: '/login/student-section', desc: 'Student registration, academic records and student profile management.', icon: <Users className="w-4 h-4 text-sky-400" /> },
     { label: 'Faculty & Coordinator Portal', path: '/login/faculty', desc: 'Class coordinators & academic faculty', icon: <Building2 className="w-4 h-4 text-indigo-400" /> },
     { label: 'Admin Command Terminal', path: '/login/admin', desc: 'System administrator & security surveillance', icon: <ShieldAlert className="w-4 h-4 text-rose-400" /> },
     { label: 'IT Department Portal', path: '/login/it', desc: 'Lab assets & computing credentials', icon: <Laptop className="w-4 h-4 text-cyan-400" /> },

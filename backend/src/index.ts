@@ -15,6 +15,7 @@ import certificateRoutes from './routes/certificate.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import facultyRoutes from './routes/faculty.routes.js';
+import studentSectionRoutes from './routes/studentSection.routes.js';
 
 const app = express();
 
@@ -79,6 +80,7 @@ app.use('/api/certificates', certificateRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/faculty', facultyRoutes);
+app.use('/api/student-section', studentSectionRoutes);
 
 // 404 Route Handler
 app.use((req: Request, res: Response) => {

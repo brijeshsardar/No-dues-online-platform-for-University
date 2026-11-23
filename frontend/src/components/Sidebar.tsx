@@ -18,7 +18,8 @@ import {
   Laptop,
   BookOpen,
   CheckCircle2,
-  Layers
+  Layers,
+  UserPlus
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -68,8 +69,12 @@ export const Sidebar: React.FC = () => {
 
   // Student Section Links
   const studentSectionLinks = [
-    { to: '/dashboard', label: 'Administrative Queue', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { to: '/department/approved', label: 'Cleared Records', icon: <FileCheck className="w-4 h-4" /> },
+    { to: '/dashboard/student-section', label: 'Section Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { to: '/dashboard/student-section?tab=register', label: 'Register Student', icon: <UserPlus className="w-4 h-4" /> },
+    { to: '/dashboard/student-section?tab=manage', label: 'Manage Students', icon: <Users className="w-4 h-4" /> },
+    { to: '/dashboard/student-section?tab=enrollments', label: 'Enrollment Records', icon: <Layers className="w-4 h-4" /> },
+    { to: '/dashboard/student-section?tab=courses', label: 'Courses & Curriculum', icon: <BookOpen className="w-4 h-4" /> },
+    { to: '/dashboard/student-section?tab=conduct', label: 'Conduct Queue', icon: <FileCheck className="w-4 h-4" /> },
   ];
 
   // Examination Controller Links
@@ -120,8 +125,8 @@ export const Sidebar: React.FC = () => {
     badgeColor = 'bg-amber-900/60 text-amber-300 border-amber-700/50';
   } else if (role === 'STUDENT_SECTION') {
     links = studentSectionLinks;
-    sectionTitle = 'Student Affairs';
-    badgeColor = 'bg-blue-900/60 text-blue-300 border-blue-700/50';
+    sectionTitle = 'Student Section';
+    badgeColor = 'bg-sky-900/60 text-sky-300 border-sky-700/50';
   }
 
   return (

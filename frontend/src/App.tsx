@@ -9,12 +9,14 @@ import { DemoCredentialsHelper } from './components/DemoCredentialsHelper.js';
 // Portal Select & Dedicated Login Pages
 import { PortalSelect } from './pages/PortalSelect.js';
 import { StudentLogin } from './pages/StudentLogin.js';
+import { StudentSectionLogin } from './pages/StudentSectionLogin.js';
 import { FacultyLogin } from './pages/FacultyLogin.js';
 import { AdminLogin } from './pages/AdminLogin.js';
 import { DepartmentLogin } from './pages/DepartmentLogin.js';
 
 // Dedicated Role Dashboards
 import { StudentPortal } from './pages/StudentPortal.js';
+import { StudentSectionPortal } from './pages/StudentSectionPortal.js';
 import { FacultyPortal } from './pages/FacultyPortal.js';
 import { ITDepartmentPortal } from './pages/ITDepartmentPortal.js';
 import { AccountSectionPortal } from './pages/AccountSectionPortal.js';
@@ -56,6 +58,7 @@ const DashboardDispatcher: React.FC = () => {
     case 'ADMIN':
       return <AdminPortal />;
     case 'STUDENT_SECTION':
+      return <StudentSectionPortal />;
     default:
       return <FacultyPortal />;
   }
@@ -119,6 +122,15 @@ export const App: React.FC = () => {
               <div className="min-h-screen bg-slate-50 flex flex-col">
                 <Navbar />
                 <StudentLogin />
+              </div>
+            }
+          />
+          <Route
+            path="/login/student-section"
+            element={
+              <div className="min-h-screen bg-slate-50 flex flex-col">
+                <Navbar />
+                <StudentSectionLogin />
               </div>
             }
           />
@@ -193,6 +205,18 @@ export const App: React.FC = () => {
               <ProtectedRoute>
                 <Layout>
                   <DashboardDispatcher />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Student Section Dedicated Route */}
+          <Route
+            path="/dashboard/student-section"
+            element={
+              <ProtectedRoute allowedRoles={['STUDENT_SECTION', 'ADMIN']}>
+                <Layout>
+                  <StudentSectionPortal />
                 </Layout>
               </ProtectedRoute>
             }
