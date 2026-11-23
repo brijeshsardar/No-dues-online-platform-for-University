@@ -1,0 +1,322 @@
+// PostgreSQL Schema for Production Deployment
+// Use with: DATABASE_URL="postgresql://user:password@localhost:5432/ct_university_nodues?schema=public"
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  ACCOUNT_SECTION
+  STUDENT_SECTION
+  LIBRARY
+  IT_DEPARTMENT
+  CLASS_COORDINATOR
+  EXAMINATION_CONTROLLER
+  ADMIN
+}
+
+enum RequestStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_ACCOUNT
+  PENDING_STUDENT_SECTION
+  PENDING_LIBRARY
+  PENDING_IT
+  PENDING_CLASS_COORDINATOR
+  PENDING_EXAMINATION_CONTROLLER
+  RETURNED
+  REJECTED
+  APPROVED
+  EXAM_ELIGIBLE
+  CERTIFICATE_ISSUED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  RETURNED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PAID
+  PARTIAL
+  OVERDUE
+  WAIVED
+}
+
+enum CertificateStatus {
+  VALID
+  REVOKED
+}
+
+model User {
+  id                  String               @id @default(uuid())
+  email               String               @unique
+  passwordHash        String
+  fullName            String
+  role                Role
+  departmentCode      String?
+  phone               String?
+  avatarUrl           String?
+  isMfaEnabled        Boolean              @default(false)
+  mfaSecret           String?
+  isActive            Boolean              @default(true)
+  failedLoginAttempts Int                  @default(0)
+  lockoutUntil        DateTime?
+  lastLoginAt         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  studentProfile      Student?
+  approvalsHandled    Approval[]
+  feeVerifications    FeeRecord[]          @relation("FeeVerifier")
+  examAuthorizations  ExaminationEligibility[] @relation("ExamAuthorizer")
+  revokedCertificates Certificate[]        @relation("CertificateRevoker")
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+
+  @@map("users")
+}
+
+model Course {
+  id             String    @id @default(uuid())
+  code           String    @unique
+  name           String
+  departmentName String
+  durationYears  Int       @default(4)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  students       Student[]
+
+  @@map("courses")
+}
+
+model Semester {
+  id        String   @id @default(uuid())
+  number    Int      @unique
+  code      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+
+  students          Student[]
+  feeRecords        FeeRecord[]
+  clearanceRequests ClearanceRequest[]
+
+  @@map("semesters")
+}
+
+model AcademicYear {
+  id         String   @id @default(uuid())
+  yearString String   @unique
+  isCurrent  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  students          Student[]
+  feeRecords        FeeRecord[]
+  clearanceRequests ClearanceRequest[]
+
+  @@map("academic_years")
+}
+
+model Student {
+  id              String            @id @default(uuid())
+  userId          String            @unique
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  studentId       String            @unique
+  enrollmentNo    String            @unique
+  courseId        String
+  course          Course            @relation(fields: [courseId], references: [id])
+  semesterId      String
+  semester        Semester          @relation(fields: [semesterId], references: [id])
+  academicYearId  String
+  academicYear    AcademicYear      @relation(fields: [academicYearId], references: [id])
+  section         String?           @default("A")
+  batchYear       String            @default("2022-2026")
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  feeRecords      FeeRecord[]
+  requests        ClearanceRequest[]
+  certificates    Certificate[]
+  eligibility     ExaminationEligibility[]
+
+  @@map("students")
+}
+
+model FeeRecord {
+  id                 String        @id @default(uuid())
+  studentId          String
+  student            Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicYearId     String
+  academicYear       AcademicYear  @relation(fields: [academicYearId], references: [id])
+  semesterId         String
+  semester           Semester      @relation(fields: [semesterId], references: [id])
+  totalFee           Float         @default(0.0)
+  paidAmount         Float         @default(0.0)
+  outstandingBalance Float         @default(0.0)
+  paymentStatus      PaymentStatus @default(PARTIAL)
+  paymentReference   String?
+  verifiedByUserId   String?
+  verifiedByUser     User?         @relation("FeeVerifier", fields: [verifiedByUserId], references: [id])
+  verifiedAt         DateTime?
+  remarks            String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@unique([studentId, academicYearId, semesterId])
+  @@map("fee_records")
+}
+
+model ClearanceRequest {
+  id                    String        @id @default(uuid())
+  requestId             String        @unique
+  studentId             String
+  student               Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  semesterId            String
+  semester              Semester      @relation(fields: [semesterId], references: [id])
+  academicYearId        String
+  academicYear          AcademicYear  @relation(fields: [academicYearId], references: [id])
+  overallStatus         RequestStatus @default(PENDING_ACCOUNT)
+  currentStage          String        @default("ACCOUNT")
+  submissionRemarks     String?
+  returnReason          String?
+  rejectionReason       String?
+  returnedByDepartment  String?
+  submittedAt           DateTime      @default(now())
+  completedAt           DateTime?
+  updatedAt             DateTime      @updatedAt
+
+  approvals             Approval[]
+  examEligibility       ExaminationEligibility?
+  certificate           Certificate?
+
+  @@map("clearance_requests")
+}
+
+model Approval {
+  id                  String            @id @default(uuid())
+  clearanceRequestId  String
+  clearanceRequest    ClearanceRequest  @relation(fields: [clearanceRequestId], references: [id], onDelete: Cascade)
+  departmentCode      String
+  status              ApprovalStatus    @default(PENDING)
+  reviewedByUserId    String?
+  reviewedByUser      User?             @relation(fields: [reviewedByUserId], references: [id])
+  remarks             String?
+  verificationDetails String?
+  digitalSignatureHash String?
+  actionTimestamp     DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@unique([clearanceRequestId, departmentCode])
+  @@map("approvals")
+}
+
+model ExaminationEligibility {
+  id                 String            @id @default(uuid())
+  clearanceRequestId String            @unique
+  clearanceRequest   ClearanceRequest  @relation(fields: [clearanceRequestId], references: [id], onDelete: Cascade)
+  studentId          String
+  student            Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  authorizedByUserId String
+  authorizedByUser   User              @relation("ExamAuthorizer", fields: [authorizedByUserId], references: [id])
+  examinationSession String            @default("Spring 2026 Regular End-Semester Examinations")
+  hallTicketAllowed  Boolean           @default(true)
+  verifiedFeeAmount  Float             @default(0.0)
+  status             String            @default("AUTHORIZED")
+  remarks            String?
+  authorizedAt       DateTime          @default(now())
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@map("examination_eligibility")
+}
+
+model Certificate {
+  id                 String            @id @default(uuid())
+  certificateId      String            @unique
+  clearanceRequestId String            @unique
+  clearanceRequest   ClearanceRequest  @relation(fields: [clearanceRequestId], references: [id], onDelete: Cascade)
+  studentId          String
+  student            Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  verificationToken  String            @unique
+  qrCodeDataUrl      String?
+  digitalSignature   String
+  pdfFilePath        String?
+  issuedAt           DateTime          @default(now())
+  status             CertificateStatus @default(VALID)
+  revokedAt          DateTime?
+  revokedByUserId    String?
+  revokedByUser      User?             @relation("CertificateRevoker", fields: [revokedByUserId], references: [id])
+  revocationReason   String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  verifications      CertificateVerification[]
+
+  @@map("certificates")
+}
+
+model CertificateVerification {
+  id                 String      @id @default(uuid())
+  certificateId      String
+  certificate        Certificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+  verifiedAt         DateTime    @default(now())
+  ipAddress          String?
+  userAgent          String?
+  verificationResult String
+
+  @@map("certificate_verifications")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("INFO")
+  isRead    Boolean  @default(false)
+  linkUrl   String?
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id                String   @id @default(uuid())
+  userId            String?
+  user              User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userRole          String?
+  action            String
+  entityType        String
+  entityId          String?
+  previousStateJson String?
+  newStateJson      String?
+  ipAddress         String?
+  userAgent         String?
+  details           String?
+  timestamp         DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model SecurityEvent {
+  id         String   @id @default(uuid())
+  eventType  String
+  severity   String
+  userId     String?
+  ipAddress  String?
+  details    String
+  createdAt  DateTime @default(now())
+
+  @@map("security_events")
+}
