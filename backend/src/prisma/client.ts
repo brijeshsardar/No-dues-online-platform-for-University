@@ -1,5 +1,42 @@
+import fs from 'fs';
+import path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { mongoSyncService } from '../services/mongoSyncService.js';
+
+// Setup writable SQLite location for Vercel Serverless environment
+if (process.env.VERCEL) {
+  const tmpDbPath = '/tmp/dev.db';
+  process.env.DATABASE_URL = `file:${tmpDbPath}`;
+
+  try {
+    const tmpDir = path.dirname(tmpDbPath);
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+  } catch {}
+
+  if (!fs.existsSync(tmpDbPath)) {
+    const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
+    const searchPaths = [
+      path.join(process.cwd(), 'backend', 'prisma', 'template.db'),
+      path.join(process.cwd(), 'prisma', 'template.db'),
+      path.join(currentDir, '..', '..', 'prisma', 'template.db'),
+      path.join(currentDir, '..', 'prisma', 'template.db'),
+      path.join(currentDir, 'template.db'),
+    ];
+    for (const p of searchPaths) {
+      if (fs.existsSync(p)) {
+        try {
+          fs.copyFileSync(p, tmpDbPath);
+          console.log(`[Database] Initialized writable SQLite at ${tmpDbPath} from ${p}`);
+          break;
+        } catch (err: any) {
+          console.warn('[Database] Could not copy template db:', err.message);
+        }
+      }
+    }
+  }
+}
 
 declare global {
   // eslint-disable-next-line no-var

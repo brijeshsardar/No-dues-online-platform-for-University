@@ -20,6 +20,7 @@ backend/secrets/*.pem
 *.db-journal
 backend/prisma/*.db
 backend/prisma/*.db-journal
+!backend/prisma/template.db
 
 # Logs
 logs/
