@@ -1431,7 +1431,7 @@ router.get('/reports', async (_req: Request, res: Response) => {
 
 /**
  * GET /api/admin/mongodb/status
- * Check MongoDB live connection status, synced record count & collection counts
+ * Check MongoDB live connection status, synced record count, collection counts & durable queue stats
  */
 router.get('/mongodb/status', async (_req: Request, res: Response) => {
   try {
@@ -1443,8 +1443,22 @@ router.get('/mongodb/status', async (_req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/admin/mongodb/test-connection
+ * Test connection to a MongoDB Atlas cluster without altering active connection state
+ */
+router.post('/mongodb/test-connection', async (req: Request, res: Response) => {
+  try {
+    const { uri } = req.body;
+    const result = await mongoSyncService.testConnection(uri);
+    res.json({ success: result.reachable, ...result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * POST /api/admin/mongodb/connect
- * Connect or update MongoDB connection URI
+ * Connect or update MongoDB Atlas connection URI and trigger initial sync
  */
 router.post('/mongodb/connect', async (req: Request, res: Response) => {
   try {
@@ -1453,22 +1467,45 @@ router.post('/mongodb/connect', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Valid MongoDB URI string is required.' });
     }
 
+    const validation = (mongoSyncService.constructor as any).validateUri(uri);
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, error: validation.error });
+    }
+
     const connected = await mongoSyncService.connect(uri);
     if (!connected) {
       const status = await mongoSyncService.getStatus();
       return res.status(400).json({
         success: false,
         error: status.lastError || 'Failed to connect to MongoDB cluster.',
+        maskedUri: status.maskedUri,
       });
     }
 
-    // After connecting, trigger initial mirror of all records
+    // After connecting, trigger initial mirror of all 19 models
     const syncResult = await mongoSyncService.syncAllRecords(prisma);
 
     res.json({
       success: true,
-      message: 'MongoDB connected and all records successfully mirrored!',
+      message: 'MongoDB Atlas connected and all 19 collections synchronized!',
+      maskedUri: (mongoSyncService.constructor as any).maskUri(uri),
       syncResult,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/mongodb/disconnect
+ * Disconnect from MongoDB Atlas and enter standby mode
+ */
+router.post('/mongodb/disconnect', async (_req: Request, res: Response) => {
+  try {
+    await mongoSyncService.disconnect();
+    res.json({
+      success: true,
+      message: 'Disconnected from MongoDB Atlas. System in STANDBY mode.',
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -1482,14 +1519,48 @@ router.post('/mongodb/connect', async (req: Request, res: Response) => {
 router.post('/mongodb/sync-all', async (_req: Request, res: Response) => {
   try {
     const result = await mongoSyncService.syncAllRecords(prisma);
-    if (!result.success) {
+    if (!result.success && result.totalSynced === 0) {
       return res.status(400).json({ success: false, error: result.error });
     }
     res.json({
       success: true,
-      message: `Successfully synchronized ${result.totalSynced} records across all collections to MongoDB!`,
+      message: `Synchronized ${result.totalSynced} records across collections to MongoDB Atlas!`,
       result,
     });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/mongodb/retry-failed
+ * Retry pending and failed jobs from the durable database queue
+ */
+router.post('/mongodb/retry-failed', async (_req: Request, res: Response) => {
+  try {
+    const result = await mongoSyncService.processDurableQueue();
+    res.json({
+      success: true,
+      message: `Processed ${result.processed} pending operations (${result.failed} failed).`,
+      result,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/mongodb/change-history
+ * Retrieve immutable audit change history records
+ */
+router.get('/mongodb/change-history', async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string || '50', 10);
+    const model = req.query.model as string | undefined;
+    const action = req.query.action as string | undefined;
+
+    const history = await mongoSyncService.getChangeHistory(limit, model, action);
+    res.json({ success: true, count: history.length, history });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }

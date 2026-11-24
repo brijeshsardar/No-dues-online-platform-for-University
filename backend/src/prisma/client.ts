@@ -16,10 +16,20 @@ const mutationActions = ['create', 'update', 'delete', 'upsert', 'createMany', '
 prisma.$use(async (params, next) => {
   const result = await next(params);
 
+  // Ignore durable queue jobs to prevent recursion
+  if (params.model === 'MongoSyncQueueJob') {
+    return result;
+  }
+
   if (params.model && mutationActions.includes(params.action)) {
-    // Asynchronously sync the change to MongoDB without blocking primary database flow
-    mongoSyncService.handlePrismaChange(params.model, params.action, params.args, result).catch((err) => {
-      console.warn(`[MongoSync] Background sync notice for ${params.model}.${params.action}:`, err.message);
+    const modelName = params.model;
+    const actionName = params.action;
+    const mutationArgs = params.args;
+    // Defer durable sync to next tick so interactive database transactions and SQLite locks are never blocked
+    setImmediate(() => {
+      mongoSyncService.handlePrismaChange(modelName, actionName, mutationArgs, result).catch((err) => {
+        console.warn(`[MongoSync] Background sync notice for ${modelName}.${actionName}:`, err.message);
+      });
     });
   }
 

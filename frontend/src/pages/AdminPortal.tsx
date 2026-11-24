@@ -39,7 +39,13 @@ import {
   CreditCard,
   Laptop,
   Database,
-  RefreshCw
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  Activity,
+  Clock,
+  PlayCircle,
+  FileCheck
 } from 'lucide-react';
 
 export const AdminPortal: React.FC = () => {
@@ -86,7 +92,18 @@ export const AdminPortal: React.FC = () => {
   const [mongoUriInput, setMongoUriInput] = useState('');
   const [mongoConnecting, setMongoConnecting] = useState(false);
   const [mongoSyncing, setMongoSyncing] = useState(false);
-  const [mongoMsg, setMongoMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [mongoTesting, setMongoTesting] = useState(false);
+  const [mongoRetrying, setMongoRetrying] = useState(false);
+  const [mongoDisconnecting, setMongoDisconnecting] = useState(false);
+  const [mongoMsg, setMongoMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [testResult, setTestResult] = useState<any>(null);
+
+  // Change History Modal States
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [changeHistory, setChangeHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyModelFilter, setHistoryModelFilter] = useState('');
+  const [historyActionFilter, setHistoryActionFilter] = useState('');
 
   const [loading, setLoading] = useState<boolean>(true);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -262,6 +279,36 @@ export const AdminPortal: React.FC = () => {
     }
   };
 
+  const handleTestMongo = async () => {
+    try {
+      setMongoTesting(true);
+      setTestResult(null);
+      setMongoMsg(null);
+      const res = await fetch('/api/admin/mongodb/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ uri: mongoUriInput.trim() || undefined }),
+      });
+      const data = await res.json();
+      setTestResult(data);
+      if (data.reachable) {
+        setMongoMsg({
+          type: 'success',
+          text: `MongoDB Atlas cluster reachable! Latency: ${data.latencyMs}ms. Database: "${data.database}"`,
+        });
+      } else {
+        setMongoMsg({
+          type: 'error',
+          text: data.error || 'Connection test failed. Check cluster hostname, credentials, or IP Access List in Atlas.',
+        });
+      }
+    } catch (err: any) {
+      setMongoMsg({ type: 'error', text: err.message || 'Error testing MongoDB connection.' });
+    } finally {
+      setMongoTesting(false);
+    }
+  };
+
   const handleConnectMongo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mongoUriInput.trim()) return;
@@ -275,15 +322,35 @@ export const AdminPortal: React.FC = () => {
       });
       const data = await res.json();
       if (data.success) {
-        setMongoMsg({ type: 'success', text: data.message || 'MongoDB connected and all records mirrored!' });
+        setMongoMsg({ type: 'success', text: data.message || 'MongoDB Atlas connected and all 19 collections synchronized!' });
+        setMongoUriInput('');
         fetchAllData();
       } else {
-        setMongoMsg({ type: 'error', text: data.error || 'Failed to connect to MongoDB cluster.' });
+        setMongoMsg({ type: 'error', text: data.error || 'Failed to connect to MongoDB Atlas.' });
       }
     } catch (err: any) {
-      setMongoMsg({ type: 'error', text: err.message || 'Network error connecting to MongoDB.' });
+      setMongoMsg({ type: 'error', text: err.message || 'Network error connecting to MongoDB Atlas.' });
     } finally {
       setMongoConnecting(false);
+    }
+  };
+
+  const handleDisconnectMongo = async () => {
+    if (!window.confirm('Disconnect from MongoDB Atlas? System will switch to STANDBY and durably queue local changes.')) return;
+    try {
+      setMongoDisconnecting(true);
+      setMongoMsg(null);
+      const res = await fetch('/api/admin/mongodb/disconnect', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setMongoMsg({ type: 'info', text: data.message });
+      fetchAllData();
+    } catch (err: any) {
+      setMongoMsg({ type: 'error', text: err.message || 'Error disconnecting.' });
+    } finally {
+      setMongoDisconnecting(false);
     }
   };
 
@@ -300,12 +367,55 @@ export const AdminPortal: React.FC = () => {
         setMongoMsg({ type: 'success', text: data.message });
         fetchAllData();
       } else {
-        setMongoMsg({ type: 'error', text: data.error || 'Failed to sync to MongoDB.' });
+        setMongoMsg({ type: 'error', text: data.error || 'Failed to sync to MongoDB Atlas.' });
       }
     } catch (err: any) {
       setMongoMsg({ type: 'error', text: err.message || 'Sync request failed.' });
     } finally {
       setMongoSyncing(false);
+    }
+  };
+
+  const handleRetryFailedJobs = async () => {
+    try {
+      setMongoRetrying(true);
+      setMongoMsg(null);
+      const res = await fetch('/api/admin/mongodb/retry-failed', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setMongoMsg({ type: 'success', text: data.message });
+      fetchAllData();
+    } catch (err: any) {
+      setMongoMsg({ type: 'error', text: err.message || 'Retry failed.' });
+    } finally {
+      setMongoRetrying(false);
+    }
+  };
+
+  const handleOpenChangeHistory = async () => {
+    setShowHistoryModal(true);
+    await loadChangeHistory();
+  };
+
+  const loadChangeHistory = async (model?: string, action?: string) => {
+    try {
+      setHistoryLoading(true);
+      const query = new URLSearchParams();
+      if (model || historyModelFilter) query.set('model', model || historyModelFilter);
+      if (action || historyActionFilter) query.set('action', action || historyActionFilter);
+      const res = await fetch(`/api/admin/mongodb/change-history?${query.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setChangeHistory(data.history || []);
+      }
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -1948,35 +2058,77 @@ export const AdminPortal: React.FC = () => {
             </div>
           </div>
 
-          {/* MongoDB Real-Time Sync & Live Mirror Configuration */}
-          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl text-white space-y-5">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          {/* MongoDB Atlas Cloud Sync & Real-Time Change Tracking Panel */}
+          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl text-white space-y-6 shadow-xl">
+            {/* Header with Connection Pill & Meta */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-5">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
-                  <Database className="w-5 h-5" />
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400">
+                  <Database className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
-                    MongoDB Real-Time Sync & Change Tracking Engine
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-extrabold text-base text-white">MongoDB Atlas Cloud Synchronization</h3>
                     <span
-                      className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                        mongoStatus?.isConnected
+                      className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 ${
+                        mongoStatus?.connectionState === 'CONNECTED'
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : mongoStatus?.uriConfigured
+                          : mongoStatus?.connectionState === 'RECONNECTING'
                           ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          : mongoStatus?.uriConfigured
+                          ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                           : 'bg-slate-700 text-slate-300 border border-slate-600'
                       }`}
                     >
-                      {mongoStatus?.isConnected ? '● Connected & Live' : mongoStatus?.uriConfigured ? '● Standby' : '● Standby (No URI)'}
+                      {mongoStatus?.connectionState === 'CONNECTED' ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                          Atlas Live {mongoStatus?.serverInfo?.latencyMs ? `(${mongoStatus.serverInfo.latencyMs}ms)` : ''}
+                        </>
+                      ) : mongoStatus?.connectionState === 'RECONNECTING' ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                          Reconnecting...
+                        </>
+                      ) : mongoStatus?.uriConfigured ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                          Configured (Standby)
+                        </>
+                      ) : (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                          Standby (No URI)
+                        </>
+                      )}
                     </span>
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Automatically mirrors every database creation, update, and change event across all 19 collections.
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Prisma write-interception automatically streams all changes across 19 collections with durable queue recovery and immutable audit snapshots.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
+              {/* Action Buttons Top Bar */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => fetchAllData()}
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition flex items-center gap-1.5"
+                  title="Refresh Database Status"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenChangeHistory}
+                  className="px-3 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 font-bold text-xs rounded-xl transition flex items-center gap-1.5"
+                  title="View Change History Audit Snapshots"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Change History
+                </button>
                 <button
                   type="button"
                   onClick={handleSyncMongo}
@@ -1984,55 +2136,159 @@ export const AdminPortal: React.FC = () => {
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center gap-2"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${mongoSyncing ? 'animate-spin' : ''}`} />
-                  {mongoSyncing ? 'Mirroring All Records...' : 'Sync All Records to MongoDB'}
+                  {mongoSyncing ? 'Mirroring 19 Collections...' : 'Sync All 19 Collections'}
                 </button>
+                {mongoStatus?.isConnected && (
+                  <button
+                    type="button"
+                    onClick={handleDisconnectMongo}
+                    disabled={mongoDisconnecting}
+                    className="px-3 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-bold text-xs rounded-xl transition flex items-center gap-1.5"
+                    title="Disconnect MongoDB Atlas"
+                  >
+                    <WifiOff className="w-3.5 h-3.5" />
+                    Disconnect
+                  </button>
+                )}
               </div>
             </div>
 
+            {/* Notification Messages */}
             {mongoMsg && (
               <div
-                className={`p-3 rounded-xl text-xs font-bold ${
+                className={`p-3.5 rounded-xl text-xs font-bold flex items-center justify-between ${
                   mongoMsg.type === 'success'
                     ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-300'
+                    : mongoMsg.type === 'info'
+                    ? 'bg-blue-500/20 border border-blue-500/30 text-blue-300'
                     : 'bg-rose-500/20 border border-rose-500/30 text-rose-300'
                 }`}
               >
-                {mongoMsg.text}
+                <span>{mongoMsg.text}</span>
+                <button onClick={() => setMongoMsg(null)} className="text-slate-400 hover:text-white ml-2">✕</button>
               </div>
             )}
 
-            {/* Connection Form */}
-            <form onSubmit={handleConnectMongo} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-              <div className="md:col-span-3">
-                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  MongoDB Connection URI (Local or MongoDB Atlas)
-                </label>
-                <input
-                  type="password"
-                  value={mongoUriInput}
-                  onChange={(e) => setMongoUriInput(e.target.value)}
-                  placeholder="mongodb+srv://<username>:<password>@cluster0.abcde.mongodb.net/ct_university_nodues?retryWrites=true&w=majority"
-                  className="w-full bg-slate-800 border border-slate-700 text-white text-xs p-2.5 rounded-xl font-mono focus:border-emerald-500 focus:outline-none"
-                />
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Synced Records</div>
+                <div className="text-xl font-black text-emerald-400 mt-1">{mongoStatus?.totalSyncedRecords ?? 0}</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Mirrored across 19 collections</div>
               </div>
+              <div className="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Target Database</div>
+                <div className="text-base font-black text-white mt-1 truncate">{mongoStatus?.dbName || 'ct_university_nodues'}</div>
+                <div className="text-[10px] text-slate-500 mt-0.5">{mongoStatus?.serverInfo?.ssl ? 'TLS Encryption Active' : 'Encrypted Connection'}</div>
+              </div>
+              <div className="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Durable Queue (Pending)</div>
+                <div className="flex items-center justify-between mt-1">
+                  <div className="text-xl font-black text-amber-400">{mongoStatus?.queueStats?.pending ?? 0}</div>
+                  {((mongoStatus?.queueStats?.pending ?? 0) > 0 || (mongoStatus?.queueStats?.failed ?? 0) > 0) && (
+                    <button
+                      type="button"
+                      onClick={handleRetryFailedJobs}
+                      disabled={mongoRetrying}
+                      className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold rounded-lg border border-amber-500/30 transition"
+                    >
+                      {mongoRetrying ? 'Retrying...' : 'Retry Queue'}
+                    </button>
+                  )}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">{mongoStatus?.queueStats?.failed ?? 0} failed attempts</div>
+              </div>
+              <div className="p-3.5 bg-slate-800/80 border border-slate-700/80 rounded-xl">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Last Mirrored At</div>
+                <div className="text-xs font-bold text-slate-200 mt-1.5 truncate">
+                  {mongoStatus?.lastSyncAt ? new Date(mongoStatus.lastSyncAt).toLocaleString() : 'Never'}
+                </div>
+                <div className="text-[10px] text-slate-500 mt-0.5">Idempotent upsert sync</div>
+              </div>
+            </div>
+
+            {/* Masked URI Display */}
+            {mongoStatus?.maskedUri && (
+              <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl flex items-center justify-between text-xs font-mono text-slate-300">
+                <div className="flex items-center gap-2 truncate">
+                  <span className="text-emerald-400 font-bold">URI:</span>
+                  <span className="truncate">{mongoStatus.maskedUri}</span>
+                </div>
+                <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-sans">Password Masked</span>
+              </div>
+            )}
+
+            {/* Connection & Test Form */}
+            <form onSubmit={handleConnectMongo} className="space-y-3">
               <div>
-                <button
-                  type="submit"
-                  disabled={mongoConnecting || !mongoUriInput.trim()}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2"
-                >
-                  {mongoConnecting ? 'Connecting...' : 'Connect & Start Live Sync'}
-                </button>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  MongoDB Atlas Connection String (`mongodb+srv://...`)
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
+                  <div className="md:col-span-2">
+                    <input
+                      type="password"
+                      value={mongoUriInput}
+                      onChange={(e) => setMongoUriInput(e.target.value)}
+                      placeholder="mongodb+srv://username:password@cluster0.abcde.mongodb.net/ct_university_nodues?retryWrites=true&w=majority"
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-xs p-2.5 rounded-xl font-mono focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={handleTestMongo}
+                      disabled={mongoTesting}
+                      className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2"
+                    >
+                      <Activity className={`w-3.5 h-3.5 ${mongoTesting ? 'animate-spin' : ''}`} />
+                      {mongoTesting ? 'Testing...' : 'Test Connection'}
+                    </button>
+                  </div>
+                  <div>
+                    <button
+                      type="submit"
+                      disabled={mongoConnecting || !mongoUriInput.trim()}
+                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-lg"
+                    >
+                      <Wifi className="w-3.5 h-3.5" />
+                      {mongoConnecting ? 'Connecting...' : 'Connect & Live Mirror'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </form>
 
-            {/* Collections Breakdown */}
+            {/* Test Connection Results Card */}
+            {testResult && (
+              <div
+                className={`p-3.5 rounded-xl text-xs space-y-1.5 ${
+                  testResult.reachable
+                    ? 'bg-emerald-950/40 border border-emerald-500/30 text-emerald-200'
+                    : 'bg-rose-950/40 border border-rose-500/30 text-rose-200'
+                }`}
+              >
+                <div className="flex items-center justify-between font-bold">
+                  <span>{testResult.reachable ? '✓ Atlas Cluster Verified Reachable' : '✗ Atlas Cluster Unreachable'}</span>
+                  <span>Latency: {testResult.latencyMs}ms</span>
+                </div>
+                {testResult.hosts && testResult.hosts.length > 0 && (
+                  <div className="text-[11px] text-slate-300 font-mono">Cluster Nodes: {testResult.hosts.join(', ')}</div>
+                )}
+                {testResult.error && <div className="text-[11px] text-rose-300">Error: {testResult.error}</div>}
+              </div>
+            )}
+
+            {/* 19 Collections Live Monitor Grid */}
             {mongoStatus?.collectionsStatus && (
               <div className="space-y-2 pt-2">
-                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Active Monitored Collections ({Object.keys(mongoStatus.collectionsStatus).length} Collections Mapped)
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    All 19 Active Monitored Collections ({Object.keys(mongoStatus.collectionsStatus).length} Collections Mapped)
+                  </h4>
+                  <span className="text-[10px] text-slate-400">Auto-synchronized via Prisma hook</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-52 overflow-y-auto p-1">
                   {Object.entries(mongoStatus.collectionsStatus).map(([col, count]) => (
                     <div key={col} className="p-2.5 bg-slate-800/80 border border-slate-700/60 rounded-xl text-left">
                       <div className="text-[10px] font-mono text-slate-400 truncate" title={col}>
@@ -2691,6 +2947,102 @@ export const AdminPortal: React.FC = () => {
                 Close Dossier
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: MONGODB AUDIT CHANGE HISTORY (IMMUTABLE AUDIT TRAIL) */}
+      {/* ========================================================================= */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-indigo-600" />
+                <span>MongoDB Change History Ledger (Immutable Audit Trail)</span>
+              </h3>
+              <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+            </div>
+
+            {/* Filters */}
+            <div className="flex gap-3 text-xs">
+              <input
+                type="text"
+                placeholder="Filter by Model (e.g. User, Student)..."
+                value={historyModelFilter}
+                onChange={(e) => {
+                  setHistoryModelFilter(e.target.value);
+                  loadChangeHistory(e.target.value, historyActionFilter);
+                }}
+                className="p-2 border border-slate-300 rounded-lg flex-1"
+              />
+              <select
+                value={historyActionFilter}
+                onChange={(e) => {
+                  setHistoryActionFilter(e.target.value);
+                  loadChangeHistory(historyModelFilter, e.target.value);
+                }}
+                className="p-2 border border-slate-300 rounded-lg font-bold"
+              >
+                <option value="">All Operations</option>
+                <option value="CREATE">CREATE</option>
+                <option value="UPDATE">UPDATE</option>
+                <option value="DELETE">DELETE</option>
+                <option value="UPSERT">UPSERT</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => loadChangeHistory()}
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-bold text-slate-700"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {/* History List */}
+            {historyLoading ? (
+              <div className="py-12 text-center text-slate-400 text-xs">Loading change audit trail...</div>
+            ) : changeHistory.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 text-xs">
+                No change audit records found. Changes are recorded automatically whenever records are modified.
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[60vh] overflow-y-auto">
+                {changeHistory.map((item, idx) => (
+                  <div key={item._id || idx} className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1 font-mono">
+                    <div className="flex items-center justify-between font-sans">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+                            item.action === 'CREATE'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : item.action === 'UPDATE'
+                              ? 'bg-blue-100 text-blue-800'
+                              : item.action === 'DELETE'
+                              ? 'bg-rose-100 text-rose-800'
+                              : 'bg-slate-200 text-slate-800'
+                          }`}
+                        >
+                          {item.action}
+                        </span>
+                        <span className="font-bold text-slate-800">{item.model}</span>
+                        {item.recordId && <span className="text-slate-500 font-mono text-[11px]">ID: {item.recordId}</span>}
+                      </div>
+                      <span className="text-[11px] text-slate-500 font-mono">
+                        {item.timestamp ? new Date(item.timestamp).toLocaleString() : ''}
+                      </span>
+                    </div>
+                    {item.changes && Object.keys(item.changes).length > 0 && (
+                      <div className="mt-1 text-[11px] bg-white p-2 rounded border border-slate-200 text-slate-700 overflow-x-auto">
+                        <span className="text-slate-400 select-none font-sans font-bold">Changes: </span>
+                        {JSON.stringify(item.changes)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

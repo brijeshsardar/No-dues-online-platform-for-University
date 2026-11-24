@@ -320,3 +320,19 @@ model SecurityEvent {
 
   @@map("security_events")
 }
+
+model MongoSyncQueueJob {
+  id         String   @id @default(uuid())
+  model      String
+  action     String
+  recordId   String?
+  payload    String
+  status     String   @default("PENDING") // PENDING, FAILED, COMPLETED
+  attempts   Int      @default(0)
+  lastError  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([status])
+  @@map("mongo_sync_queue_jobs")
+}
