@@ -11,8 +11,25 @@ if (API_BASE_URL && typeof window !== 'undefined') {
   const originalFetch = window.fetch.bind(window);
 
   window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    if (typeof input === 'string' && input.startsWith('/api')) {
-      return originalFetch(`${cleanBase}${input}`, init);
+    if (typeof input === 'string') {
+      if (input.startsWith('/api')) {
+        return originalFetch(`${cleanBase}${input}`, init);
+      }
+    } else if (input instanceof URL) {
+      if (input.pathname.startsWith('/api')) {
+        return originalFetch(`${cleanBase}${input.pathname}${input.search}`, init);
+      }
+    } else if (typeof Request !== 'undefined' && input instanceof Request) {
+      try {
+        const url = new URL(input.url, window.location.origin);
+        if (url.pathname.startsWith('/api')) {
+          const newUrl = `${cleanBase}${url.pathname}${url.search}`;
+          const newReq = new Request(newUrl, input);
+          return originalFetch(newReq, init);
+        }
+      } catch {
+        // Fallback to standard request
+      }
     }
     return originalFetch(input, init);
   };
