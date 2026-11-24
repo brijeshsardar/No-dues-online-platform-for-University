@@ -37,7 +37,9 @@ import {
   Eye,
   Send,
   CreditCard,
-  Laptop
+  Laptop,
+  Database,
+  RefreshCw
 } from 'lucide-react';
 
 export const AdminPortal: React.FC = () => {
@@ -78,6 +80,13 @@ export const AdminPortal: React.FC = () => {
     academicYears: [],
     departments: [],
   });
+
+  // MongoDB Real-Time Sync States
+  const [mongoStatus, setMongoStatus] = useState<any>(null);
+  const [mongoUriInput, setMongoUriInput] = useState('');
+  const [mongoConnecting, setMongoConnecting] = useState(false);
+  const [mongoSyncing, setMongoSyncing] = useState(false);
+  const [mongoMsg, setMongoMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -239,11 +248,64 @@ export const AdminPortal: React.FC = () => {
       if (resReapp.ok) setReapplications((await resReapp.json()).reapplications || []);
       if (resLogs.ok) setAuditLogs((await resLogs.json()).logs || []);
       if (resSec.ok) setSecurityEvents((await resSec.json()).events || []);
+
+      // Fetch MongoDB Real-Time Sync Status
+      try {
+        const resMongo = await fetch('/api/admin/mongodb/status', { headers: { Authorization: `Bearer ${token}` } });
+        if (resMongo.ok) setMongoStatus(await resMongo.json());
+      } catch {}
     } catch (e: any) {
       console.error(e);
       setStatusMsg({ type: 'error', text: e.message || 'Error loading admin data' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConnectMongo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mongoUriInput.trim()) return;
+    try {
+      setMongoConnecting(true);
+      setMongoMsg(null);
+      const res = await fetch('/api/admin/mongodb/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ uri: mongoUriInput.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMongoMsg({ type: 'success', text: data.message || 'MongoDB connected and all records mirrored!' });
+        fetchAllData();
+      } else {
+        setMongoMsg({ type: 'error', text: data.error || 'Failed to connect to MongoDB cluster.' });
+      }
+    } catch (err: any) {
+      setMongoMsg({ type: 'error', text: err.message || 'Network error connecting to MongoDB.' });
+    } finally {
+      setMongoConnecting(false);
+    }
+  };
+
+  const handleSyncMongo = async () => {
+    try {
+      setMongoSyncing(true);
+      setMongoMsg(null);
+      const res = await fetch('/api/admin/mongodb/sync-all', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMongoMsg({ type: 'success', text: data.message });
+        fetchAllData();
+      } else {
+        setMongoMsg({ type: 'error', text: data.error || 'Failed to sync to MongoDB.' });
+      }
+    } catch (err: any) {
+      setMongoMsg({ type: 'error', text: err.message || 'Sync request failed.' });
+    } finally {
+      setMongoSyncing(false);
     }
   };
 
@@ -1884,6 +1946,106 @@ export const AdminPortal: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* MongoDB Real-Time Sync & Live Mirror Configuration */}
+          <div className="p-6 bg-slate-900 border border-slate-800 rounded-2xl text-white space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-white flex items-center gap-2">
+                    MongoDB Real-Time Sync & Change Tracking Engine
+                    <span
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                        mongoStatus?.isConnected
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                          : mongoStatus?.uriConfigured
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          : 'bg-slate-700 text-slate-300 border border-slate-600'
+                      }`}
+                    >
+                      {mongoStatus?.isConnected ? '● Connected & Live' : mongoStatus?.uriConfigured ? '● Standby' : '● Standby (No URI)'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Automatically mirrors every database creation, update, and change event across all 19 collections.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleSyncMongo}
+                  disabled={mongoSyncing}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${mongoSyncing ? 'animate-spin' : ''}`} />
+                  {mongoSyncing ? 'Mirroring All Records...' : 'Sync All Records to MongoDB'}
+                </button>
+              </div>
+            </div>
+
+            {mongoMsg && (
+              <div
+                className={`p-3 rounded-xl text-xs font-bold ${
+                  mongoMsg.type === 'success'
+                    ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-300'
+                    : 'bg-rose-500/20 border border-rose-500/30 text-rose-300'
+                }`}
+              >
+                {mongoMsg.text}
+              </div>
+            )}
+
+            {/* Connection Form */}
+            <form onSubmit={handleConnectMongo} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+              <div className="md:col-span-3">
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  MongoDB Connection URI (Local or MongoDB Atlas)
+                </label>
+                <input
+                  type="password"
+                  value={mongoUriInput}
+                  onChange={(e) => setMongoUriInput(e.target.value)}
+                  placeholder="mongodb+srv://<username>:<password>@cluster0.abcde.mongodb.net/ct_university_nodues?retryWrites=true&w=majority"
+                  className="w-full bg-slate-800 border border-slate-700 text-white text-xs p-2.5 rounded-xl font-mono focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <button
+                  type="submit"
+                  disabled={mongoConnecting || !mongoUriInput.trim()}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2"
+                >
+                  {mongoConnecting ? 'Connecting...' : 'Connect & Start Live Sync'}
+                </button>
+              </div>
+            </form>
+
+            {/* Collections Breakdown */}
+            {mongoStatus?.collectionsStatus && (
+              <div className="space-y-2 pt-2">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Active Monitored Collections ({Object.keys(mongoStatus.collectionsStatus).length} Collections Mapped)
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-1">
+                  {Object.entries(mongoStatus.collectionsStatus).map(([col, count]) => (
+                    <div key={col} className="p-2.5 bg-slate-800/80 border border-slate-700/60 rounded-xl text-left">
+                      <div className="text-[10px] font-mono text-slate-400 truncate" title={col}>
+                        {col}
+                      </div>
+                      <div className="text-sm font-black text-emerald-400 mt-0.5">
+                        {count as number} <span className="text-[9px] font-normal text-slate-500">docs</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -45,6 +45,7 @@ flowchart LR
 - **Frontend:** React 18, Vite, TypeScript, Tailwind CSS, Lucide React, React Router 6.
 - **Backend:** Node.js, Express, TypeScript, Helmet, CORS, Express-Rate-Limit, Cookie-Parser, Zod.
 - **Database & ORM:** Prisma ORM, SQLite (local development / zero setup) & PostgreSQL (production schema provided in `schema.postgresql.prisma`).
+- **Real-Time Database Mirror & Change Capture:** MongoDB (auto-captures & streams every creation, update, and deletion across all 19 collections and records historical snapshots in `change_history`).
 - **Cryptography & Documents:** Node.js Crypto (RSA-2048, SHA-256), PDFKit, QRCode, OTPAuth / Otplib.
 
 ---
@@ -94,6 +95,38 @@ The repository is pre-configured for seamless Vercel deployment with `vercel.jso
 
 3. **Single-Page Application (SPA) Routing:**
    - Client-side routes (`/portal-select`, `/student`, `/admin`, `/verify/:token`, etc.) are pre-configured in `vercel.json` with SPA rewrite rules to prevent 404 errors on direct navigation or page reload.
+
+---
+
+## 🍃 MongoDB Real-Time Sync & Change Tracking Engine
+
+Every database transaction, new entry, record modification, and deletion across all 19 database models is intercepted via Prisma change-capture middleware and mirrored to MongoDB:
+
+1. **How It Works:**
+   - **Prisma Middleware Hook (`prisma.$use`)**: Intercepts every write mutation (`create`, `update`, `delete`, `upsert`, `createMany`, `updateMany`, `deleteMany`).
+   - **Live Collections**: Automatically keeps 19 collections synchronized in MongoDB (`users`, `clearance_requests`, `fee_records`, `certificates`, `students`, `audit_logs`, etc.).
+   - **Change History Ledger (`change_history`)**: Stores an immutable audit trail of every update, including the field-level diffs, before/after snapshots, and precise timestamps.
+
+2. **Configuration in `.env`:**
+   Add your MongoDB connection string in `backend/.env` (or in Vercel environment variables):
+   ```env
+   # Local MongoDB:
+   MONGODB_URI=mongodb://localhost:27017/ct_university_nodues
+
+   # Or MongoDB Atlas (Cloud Free Tier):
+   MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.abcde.mongodb.net/ct_university_nodues?retryWrites=true&w=majority
+   MONGODB_DB_NAME=ct_university_nodues
+   ```
+
+3. **Admin Portal UI & Controls:**
+   - Navigate to the **Admin Portal** (`admin@ctuniversity.edu` / `Password123!`) $\rightarrow$ **Settings** tab.
+   - View live MongoDB connection status, total synced records count, and active monitored collections.
+   - Enter your connection URI and click **Connect & Start Live Sync** or trigger **Sync All Records to MongoDB** with 1 click.
+
+4. **API Endpoints:**
+   - `GET /api/admin/mongodb/status` - Live connection state, database name, and collection counts.
+   - `POST /api/admin/mongodb/connect` - Connect or update MongoDB URI.
+   - `POST /api/admin/mongodb/sync-all` - Full bulk synchronization of all existing records from all 19 models.
 
 ---
 

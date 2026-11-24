@@ -14,4 +14,6 @@ export const config = {
   mfaAppName: process.env.MFA_APP_NAME || 'CT University Clearance',
   verifyBaseUrl: process.env.VERIFY_BASE_URL || 'http://localhost:5173/verify',
   isProduction: process.env.NODE_ENV === 'production',
+  mongoDbUri: process.env.MONGODB_URI || '',
+  mongoDbName: process.env.MONGODB_DB_NAME || 'ct_university_nodues',
 };

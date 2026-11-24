@@ -5,6 +5,7 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 import { Role } from '../types/index.js';
 import { AuditService } from '../services/auditService.js';
 import { NotificationService } from '../services/notificationService.js';
+import { mongoSyncService } from '../services/mongoSyncService.js';
 
 const router = Router();
 
@@ -1419,6 +1420,76 @@ router.get('/reports', async (_req: Request, res: Response) => {
     });
 
     res.json({ success: true, requests });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// =========================================================================
+// 15. MONGODB REAL-TIME SYNC & RECORD REPLICATION
+// =========================================================================
+
+/**
+ * GET /api/admin/mongodb/status
+ * Check MongoDB live connection status, synced record count & collection counts
+ */
+router.get('/mongodb/status', async (_req: Request, res: Response) => {
+  try {
+    const status = await mongoSyncService.getStatus();
+    res.json({ success: true, ...status });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/mongodb/connect
+ * Connect or update MongoDB connection URI
+ */
+router.post('/mongodb/connect', async (req: Request, res: Response) => {
+  try {
+    const { uri } = req.body;
+    if (!uri || typeof uri !== 'string') {
+      return res.status(400).json({ success: false, error: 'Valid MongoDB URI string is required.' });
+    }
+
+    const connected = await mongoSyncService.connect(uri);
+    if (!connected) {
+      const status = await mongoSyncService.getStatus();
+      return res.status(400).json({
+        success: false,
+        error: status.lastError || 'Failed to connect to MongoDB cluster.',
+      });
+    }
+
+    // After connecting, trigger initial mirror of all records
+    const syncResult = await mongoSyncService.syncAllRecords(prisma);
+
+    res.json({
+      success: true,
+      message: 'MongoDB connected and all records successfully mirrored!',
+      syncResult,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/mongodb/sync-all
+ * Force a full synchronization of all 19 database models into MongoDB
+ */
+router.post('/mongodb/sync-all', async (_req: Request, res: Response) => {
+  try {
+    const result = await mongoSyncService.syncAllRecords(prisma);
+    if (!result.success) {
+      return res.status(400).json({ success: false, error: result.error });
+    }
+    res.json({
+      success: true,
+      message: `Successfully synchronized ${result.totalSynced} records across all collections to MongoDB!`,
+      result,
+    });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
