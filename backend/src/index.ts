@@ -29,17 +29,35 @@ app.use(
         scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com'],
-        connectSrc: ["'self'", config.clientUrl],
+        connectSrc: ["'self'", config.clientUrl, 'https://*.vercel.app'],
       },
     },
     crossOriginEmbedderPolicy: false,
   })
 );
 
-// Strict CORS configuration
+// Strict CORS configuration supporting local dev and Vercel domains
+const allowedOrigins = [
+  config.clientUrl,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5000',
+  'http://127.0.0.1:5000',
+];
+
 app.use(
   cors({
-    origin: [config.clientUrl, 'http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith('.vercel.app') ||
+        process.env.NODE_ENV !== 'production'
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -101,14 +119,16 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
-// Start Server
-app.listen(config.port, () => {
-  console.log(`==================================================================`);
-  console.log(` CT UNIVERSITY NO-DUES & EXAMINATION CLEARANCE SYSTEM BACKEND `);
-  console.log(` Server listening on http://localhost:${config.port}             `);
-  console.log(` Environment: ${config.nodeEnv}                                 `);
-  console.log(` Defense-in-depth security controls active.                       `);
-  console.log(`==================================================================`);
-});
+// Start Server if run directly (not in serverless environment)
+if (!process.env.VERCEL) {
+  app.listen(config.port, () => {
+    console.log(`==================================================================`);
+    console.log(` CT UNIVERSITY NO-DUES & EXAMINATION CLEARANCE SYSTEM BACKEND `);
+    console.log(` Server listening on http://localhost:${config.port}             `);
+    console.log(` Environment: ${config.nodeEnv}                                 `);
+    console.log(` Defense-in-depth security controls active.                       `);
+    console.log(`==================================================================`);
+  });
+}
 
 export default app;

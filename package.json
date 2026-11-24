@@ -1,0 +1,16 @@
+{
+  "name": "secure-nodues-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Secure Digital No-Dues & Examination Eligibility Clearance System",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "build:all": "cd backend && npm install && npx prisma generate && npm run build && cd ../frontend && npm install && npm run build",
+    "start": "cd backend && npm start",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

@@ -76,6 +76,27 @@ Frontend will start on `http://localhost:5173`.
 
 ---
 
+## 🌐 Deploying to Vercel
+
+The repository is pre-configured for seamless Vercel deployment with `vercel.json` and root `package.json`:
+
+1. **Import to Vercel:**
+   - Link this GitHub repository in your Vercel Dashboard.
+   - Leave the **Root Directory** as `./` (default) or set it to `frontend` — both work out-of-the-box!
+   - Framework preset: **Vite** (auto-detected).
+   - Build command: `cd frontend && npm install && npm run build` (auto-detected via `vercel.json`).
+   - Output directory: `frontend/dist` (auto-detected).
+
+2. **Environment Variables (Optional):**
+   - If hosting the backend on Render, Railway, Fly.io, or VPS, add:
+     - `VITE_API_URL`: `https://your-backend-api.onrender.com`
+   - If unset, the frontend connects to relative `/api` (proxied to `http://localhost:5000` in local development).
+
+3. **Single-Page Application (SPA) Routing:**
+   - Client-side routes (`/portal-select`, `/student`, `/admin`, `/verify/:token`, etc.) are pre-configured in `vercel.json` with SPA rewrite rules to prevent 404 errors on direct navigation or page reload.
+
+---
+
 ## 🔑 Test Accounts & Evaluation Guide
 
 A top **Evaluation Quick-Role Switcher** bar is embedded at the top of the interface for 1-click test login as any of the 8 roles:
