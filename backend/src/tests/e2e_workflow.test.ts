@@ -43,6 +43,21 @@ async function runTestSuite() {
 
   assert(!!student1 && !!student2 && !!accountOfficer && !!examController, 'Database seed accounts exist and are verified');
 
+  // Clean up any test requests from prior test runs for student1 and student2
+  if (student1) {
+    const existingReqs = await prisma.clearanceRequest.findMany({
+      where: { studentId: { in: [student1.id, student2?.id].filter(Boolean) as string[] } },
+      select: { id: true },
+    });
+    const reqIds = existingReqs.map((r) => r.id);
+    if (reqIds.length > 0) {
+      await prisma.certificate.deleteMany({ where: { clearanceRequestId: { in: reqIds } } });
+      await prisma.examinationEligibility.deleteMany({ where: { clearanceRequestId: { in: reqIds } } });
+      await prisma.approval.deleteMany({ where: { clearanceRequestId: { in: reqIds } } });
+      await prisma.clearanceRequest.deleteMany({ where: { id: { in: reqIds } } });
+    }
+  }
+
   console.log('\n--- PHASE 1: SEQUENTIAL WORKFLOW VERIFICATION (STUDENT 1) ---');
 
   // Step 1: Student Submission
@@ -130,7 +145,7 @@ async function runTestSuite() {
   assert(reqAfterCoord.currentStage === 'EXAM_CONTROLLER', 'Class Coordinator advances stage to EXAM_CONTROLLER');
 
   // Step 7: Final Examination Controller Authorization & Certificate Generation
-  const certIdRahul = `CT-NDC-EX-${new Date().getFullYear()}-1042`;
+  const certIdRahul = `CT-NDC-EX-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
   const tokenRahul = CryptoService.generateSecureToken(24);
   const certIssueDate = new Date();
 
@@ -337,4 +352,5 @@ runTestSuite()
   })
   .finally(async () => {
     await prisma.$disconnect();
+    process.exit(0);
   });

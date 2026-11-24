@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
+// Load .env from current directory first, then fallback to backend/.env
+dotenv.config();
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 export const config = {

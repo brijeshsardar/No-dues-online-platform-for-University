@@ -4,6 +4,19 @@ import { CryptoService } from '../services/cryptoService.js';
 import { PdfService } from '../services/pdfService.js';
 import { Role, RequestStatus, ApprovalStatus } from '../types/index.js';
 
+export async function ensureDatabasePopulated() {
+  try {
+    const userCount = await prisma.user.count();
+    if (userCount > 0) {
+      return;
+    }
+    console.log('[Database] Fresh database detected. Initializing default university records...');
+    await runSeedInserts();
+  } catch (err: any) {
+    console.warn('[Database] Initial population notice:', err.message);
+  }
+}
+
 export async function seedDatabase() {
   console.log('Seeding CT University Database with realistic test records...');
 
@@ -27,6 +40,11 @@ export async function seedDatabase() {
   await prisma.course.deleteMany({});
   await prisma.semester.deleteMany({});
   await prisma.academicYear.deleteMany({});
+
+  await runSeedInserts();
+}
+
+async function runSeedInserts() {
 
   // 2. Academic Years
   const ayCurrent = await prisma.academicYear.create({
@@ -537,11 +555,13 @@ export async function seedDatabase() {
   console.log(`Sample Certificate Token: ${tokenAmit}`);
 }
 
-seedDatabase()
-  .catch((e) => {
-    console.error('Error during database seed:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+if (process.argv[1] && (process.argv[1].endsWith('seed.ts') || process.argv[1].endsWith('seed.js'))) {
+  seedDatabase()
+    .catch((e) => {
+      console.error('Error during database seed:', e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

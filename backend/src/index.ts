@@ -16,6 +16,8 @@ import adminRoutes from './routes/admin.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import facultyRoutes from './routes/faculty.routes.js';
 import studentSectionRoutes from './routes/studentSection.routes.js';
+import { ensureDatabasePopulated } from './prisma/seed.js';
+import { mongoSyncService } from './services/mongoSyncService.js';
 
 const app = express();
 
@@ -121,14 +123,30 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 // Start Server if run directly (not in serverless environment)
 if (!process.env.VERCEL) {
-  app.listen(config.port, () => {
-    console.log(`==================================================================`);
-    console.log(` CT UNIVERSITY NO-DUES & EXAMINATION CLEARANCE SYSTEM BACKEND `);
-    console.log(` Server listening on http://localhost:${config.port}             `);
-    console.log(` Environment: ${config.nodeEnv}                                 `);
-    console.log(` Defense-in-depth security controls active.                       `);
-    console.log(`==================================================================`);
-  });
+  ensureDatabasePopulated()
+    .catch((err) => console.warn('[Database] Initial population check notice:', err.message))
+    .finally(() => {
+      const server = app.listen(config.port, '0.0.0.0', () => {
+        console.log(`==================================================================`);
+        console.log(` CT UNIVERSITY NO-DUES & EXAMINATION CLEARANCE SYSTEM BACKEND `);
+        console.log(` Server listening on 0.0.0.0:${config.port}                       `);
+        console.log(` Environment: ${config.nodeEnv}                                 `);
+        console.log(` Defense-in-depth security controls active.                       `);
+        console.log(`==================================================================`);
+      });
+
+      const gracefulShutdown = async (signal: string) => {
+        console.log(`\n[Server] Received ${signal}. Starting graceful shutdown...`);
+        server.close(async () => {
+          await mongoSyncService.disconnect().catch(() => {});
+          console.log('[Server] Shutdown complete.');
+          process.exit(0);
+        });
+      };
+
+      process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+      process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    });
 }
 
 export default app;

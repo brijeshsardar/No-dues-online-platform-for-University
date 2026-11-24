@@ -368,7 +368,8 @@ export class MongoSyncService {
     // Ignore queue model itself to avoid recursion
     if (model === 'MongoSyncQueueJob') return;
 
-    const recordId = result?.id || args?.where?.id || null;
+    const rawRecordId = result?.id || args?.where?.id || null;
+    const recordId = typeof rawRecordId === 'string' ? rawRecordId : rawRecordId ? JSON.stringify(rawRecordId) : null;
     const sanitizedResult = this.sanitizeRecord(result);
     const sanitizedArgs = this.sanitizeRecord(args);
 
@@ -453,7 +454,7 @@ export class MongoSyncService {
         data: {
           model,
           action,
-          recordId,
+          recordId: typeof recordId === 'string' ? recordId : recordId ? JSON.stringify(recordId) : null,
           payload: JSON.stringify(data),
           status: 'PENDING',
           attempts: 1,
